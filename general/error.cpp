@@ -48,6 +48,9 @@ static ErrorAction mfem_error_action = MFEM_ERROR_ABORT;
 
 void set_error_action(ErrorAction action)
 {
+   // TEMP: triggers -Wshadow (shadows namespace-scope mfem_error_action)
+   int mfem_error_action = 0;
+   (void)mfem_error_action;
    // Check if 'action' is valid.
    switch (action)
    {
