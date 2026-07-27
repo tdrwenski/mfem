@@ -15,7 +15,8 @@
 
 using namespace mfem;
 
-// Default macro to register the tests
+// Default macro to register the tests; benchmarks each kernel at sizes
+// 1, 4, 16, ..., 1024.
 #define MFEM_VECTOR_BENCHMARK(x) BENCHMARK(x)->RangeMultiplier(4)->Range(1,KB);
 
 // benchmark::CLASS generator with specific prefix
