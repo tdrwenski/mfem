@@ -75,8 +75,7 @@ static void Vector_EQ_MFEM(benchmark::State& state)
 {
    const size_t size = state.range(0);
    mfem::Vector x(size);
-   // DEMO: deliberate regression for CodSpeed testing -- do not merge.
-   for (auto _ : state) { mfem::Vector tmp(x); tmp = M_PI; x = tmp; }
+   for (auto _ : state) { x = M_PI; }
 }
 MFEM_VECTOR_BENCHMARK(Vector_EQ_MFEM);
 
