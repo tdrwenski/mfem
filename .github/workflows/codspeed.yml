@@ -1,0 +1,85 @@
+# Copyright (c) 2010-2025, Lawrence Livermore National Security, LLC. Produced
+# at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+# LICENSE and NOTICE for details. LLNL-CODE-806117.
+#
+# This file is part of the MFEM library. For more information and source code
+# availability visit https://mfem.org.
+#
+# MFEM is free software; you can redistribute it and/or modify it under the
+# terms of the BSD-3 license. We welcome feedback and contributions, see file
+# CONTRIBUTING.md for details.
+
+# Continuous benchmarking with CodSpeed (https://codspeed.io).
+#
+# MFEM's Google Benchmark based benchmarks (tests/benchmarks) are built
+# against CodSpeed's instrumented fork of Google Benchmark
+# (https://github.com/CodSpeedHQ/codspeed-cpp), which is a drop-in
+# replacement. The CodSpeed action then runs the selected benchmark(s) under
+# its measurement harness and reports results to codspeed.io.
+name: CodSpeed Benchmarks
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Needed for CodSpeed tokenless (OIDC) authentication on public repos.
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CODSPEED_CPP_VERSION: v2.4.0
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MFEM
+        uses: actions/checkout@v4
+        with:
+          path: mfem
+
+      - name: Checkout codspeed-cpp
+        uses: actions/checkout@v4
+        with:
+          repository: CodSpeedHQ/codspeed-cpp
+          ref: ${{ env.CODSPEED_CPP_VERSION }}
+          path: codspeed-cpp
+
+      - name: Build CodSpeed Google Benchmark fork
+        run: |
+          cmake -S codspeed-cpp/google_benchmark -B codspeed-cpp/build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCODSPEED_MODE=simulation \
+            -DBENCHMARK_ENABLE_TESTING=OFF \
+            -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
+          cmake --build codspeed-cpp/build -j"$(nproc)"
+
+      # Point MFEM directly at the codspeed-cpp build tree (headers and static
+      # libraries) instead of an install prefix: 'cmake --install' of the fork
+      # is broken by a hardcoded /usr/local destination, see
+      # https://github.com/CodSpeedHQ/codspeed-cpp/issues/51. Once a release
+      # ships with a fix, this can be simplified to an install + BENCHMARK_DIR.
+      - name: Configure and build MFEM benchmark
+        run: |
+          BENCH_INC="${PWD}/codspeed-cpp/google_benchmark/include;${PWD}/codspeed-cpp/core/include"
+          BENCH_LIB="${PWD}/codspeed-cpp/build/src/libbenchmark.a;${PWD}/codspeed-cpp/build/codspeed/libcodspeed.a;${PWD}/codspeed-cpp/build/codspeed/libinstrument_hooks.a"
+          cmake -S mfem -B mfem/build \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DMFEM_USE_BENCHMARK=YES \
+            -DBENCHMARK_INCLUDE_DIRS="${BENCH_INC}" \
+            -DBENCHMARK_LIBRARIES="${BENCH_LIB}"
+          cmake --build mfem/build --target bench_vector -j"$(nproc)"
+
+      - name: Run benchmarks with CodSpeed
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: simulation
+          run: ./mfem/build/tests/benchmarks/bench_vector
