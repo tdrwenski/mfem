@@ -24,7 +24,9 @@ on:
 
 permissions:
   contents: read
-  # Needed for CodSpeed tokenless (OIDC) authentication on public repos.
+  # OIDC authentication with CodSpeed. GitHub does not grant this permission
+  # to pull_request runs from forks; there the action falls back to tokenless
+  # uploads, which CodSpeed supports for public repositories.
   id-token: write
 
 concurrency:
@@ -36,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout MFEM
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure and build MFEM benchmark
         run: |
