@@ -35,7 +35,9 @@ concurrency:
 
 jobs:
   benchmarks:
-    runs-on: ubuntu-latest
+    # Pinned OS version: CodSpeed compares instruction counts, so baseline and
+    # PR runs should use the same toolchain. 'ubuntu-latest' shifts more often.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout MFEM
         uses: actions/checkout@v5
