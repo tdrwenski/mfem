@@ -1,0 +1,70 @@
+# Copyright (c) 2010-2025, Lawrence Livermore National Security, LLC. Produced
+# at the Lawrence Livermore National Laboratory. All Rights reserved. See files
+# LICENSE and NOTICE for details. LLNL-CODE-806117.
+#
+# This file is part of the MFEM library. For more information and source code
+# availability visit https://mfem.org.
+#
+# MFEM is free software; you can redistribute it and/or modify it under the
+# terms of the BSD-3 license. We welcome feedback and contributions, see file
+# CONTRIBUTING.md for details.
+---
+# GitHub caches are immutable, so each CI run saves a new ccache entry keyed by
+# run id and the old ones linger until the repo hits its 10 GB LRU limit. This
+# workflow runs after every "Tests" run and keeps only the most-recently-used
+# cache per job per branch, deleting the older duplicates.
+name: Cleanup ccache
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Delete stale ccache entries
+        run: |
+          gh extension install actions/gh-actions-cache
+
+          # Resolve the branch the triggering run belongs to. For PRs the caches
+          # are stored under refs/pull/<n>/merge; for pushes under the head ref.
+          if [[ "${{ github.event.workflow_run.event }}" == "pull_request" ]]; then
+            pr_sha=${{ github.event.workflow_run.head_sha }}
+            pr_number=$(gh pr list --search "$pr_sha" --state all \
+              --json number --jq '.[0].number')
+            if [[ -z "$pr_number" ]]; then
+              echo "Could not resolve PR number for $pr_sha; nothing to do."
+              exit 0
+            fi
+            BRANCH="refs/pull/${pr_number}/merge"
+          else
+            BRANCH="refs/heads/${{ github.event.workflow_run.head_branch }}"
+          fi
+          echo "Cleaning ccache entries on $BRANCH"
+
+          # Don't fail the workflow on individual delete errors.
+          set +e
+
+          # ccache keys end in "-<run_id>"; the rest is the job identity. List
+          # entries newest-first and, for each identity, keep the first (newest)
+          # and delete the rest.
+          old_keys=$(gh actions-cache list -L 100 -R "$GH_REPO" -B "$BRANCH" \
+            --key "ccache-" --sort last-used | cut -f 1 \
+            | awk '{ id=$0; sub(/-[0-9]+$/,"",id); if (seen[id]++) print $0 }')
+
+          IFS=$'\n'
+          for k in $old_keys; do
+            echo "Deleting $k"
+            gh actions-cache delete "$k" -R "$GH_REPO" -B "$BRANCH" --confirm
+          done
+          unset IFS
