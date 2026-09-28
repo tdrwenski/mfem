@@ -148,13 +148,12 @@ jobs:
       CCACHE_KEY: ccache-${{ matrix.os }}-${{ matrix.build-system }}-${{ matrix.target }}-${{ matrix.mpi }}-${{ matrix.hypre-target }}-${{ matrix.precision }}${{ matrix.enzyme && '-enzyme' || '' }}
 
     steps:
-      # Fix 'No space left on device' errors for Ubuntu builds.
-      - name: Run Actions Cleaner
+      # Measure disk usage without the maximize-build-space action, to check
+      # whether the runners' baseline free space is enough for the builds
+      # (compare with "disk space (after)" at the end of the job).
+      - name: disk space (before)
         if: matrix.os == 'ubuntu-latest'
-        uses: easimon/maximize-build-space@v8
-        with:
-          overprovision-lvm: "true"
-          remove-android: "true"
+        run: df -h /
 
       # Checkout MFEM in "mfem" subdirectory. Final path:
       # /home/runner/work/mfem/mfem/mfem
@@ -447,3 +446,9 @@ jobs:
         run: |
           cd ${{ env.MFEM_TOP_DIR }}/tests/scripts
           ./runtest gitignore
+
+      # Runs even when an earlier step failed, so a "No space left on device"
+      # failure still reports how full the disk got.
+      - name: disk space (after)
+        if: always() && matrix.os == 'ubuntu-latest'
+        run: df -h /
